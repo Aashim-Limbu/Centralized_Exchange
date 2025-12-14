@@ -1,4 +1,4 @@
-export type OrderSide = "buy" | "sell";
+export type OrderSide = "BUY" | "SELL";
 
 export interface Order {
   orderId: string;
