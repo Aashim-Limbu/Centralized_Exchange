@@ -15,6 +15,7 @@ export interface Fill {
   marketOrderid: string;
 }
 
+// There is multiple orderBook in a Exchanges.
 export class OrderBook {
   bids: Order[];
   asks: Order[];
@@ -38,6 +39,7 @@ export class OrderBook {
   ticker() {
     return `${this.baseAsset}-${this.quoteAsset}`;
   }
+  // This is for replicating the orderbooks . Each orderbook is snapshotted after certain intervals.
   getSnapshot() {
     return {
       baseAsset: this.baseAsset,
@@ -128,6 +130,7 @@ export class OrderBook {
       });
       bid.filled += fillable_quantity;
       executedQty += fillable_quantity;
+      this.currentPrice = order.price;
       if (bid.quantity === bid.filled) {
         this.bids.splice(i, 1);
         i--;
