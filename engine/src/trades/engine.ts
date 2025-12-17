@@ -1,20 +1,27 @@
 import fs from "fs";
 import { OrderBook, type Order } from "./orderbook";
+import type { MessageFromApi } from "../types/fromApi";
+import { CREATE_ORDER } from "../types/toApi";
+import { safe } from "../lib/safe";
 
 interface UserBalance {
   available: number;
   locked: number;
 }
 type Balance = Record<string, UserBalance>;
+interface ProcessProps{
+    message: MessageFromApi,
+    clientId: string  // a channel where the engine publish message to api.
+}
 /**
 balances = {
     "1": {
-        INR:  { available: 10000000, locked: 0 },
-        TATA: { available: 10000000, locked: 0 }
+        NRS:  { available: 10000000, locked: 0 },
+        GBRL: { available: 10000000, locked: 0 }
     },
     "2": {
-        INR:  { available: 10000000, locked: 0 },
-        TATA: { available: 10000000, locked: 0 }
+        NRS:  { available: 10000000, locked: 0 },
+        HRL: { available: 10000000, locked: 0 }
     }
 }
 */
@@ -63,5 +70,13 @@ export class Engine {
       balances: Array.from(this.balances.entries()),
     };
     fs.writeFileSync("./snapshot.json", JSON.stringify(snapshot));
+  }
+   process({message,clientId}:ProcessProps) {
+    switch (message.type){
+        case CREATE_ORDER:
+            safe(
+                
+            )
+    }
   }
 }
