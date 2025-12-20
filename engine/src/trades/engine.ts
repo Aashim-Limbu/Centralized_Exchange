@@ -1,5 +1,5 @@
 import fs from "fs";
-import { OrderBook, type Order, type Side } from "./orderbook";
+import { OrderBook, type Fill, type Order, type Side } from "./orderbook";
 import type { MessageFromApi } from "../types/fromApi";
 import { CREATE_ORDER } from "../types/toApi";
 import { safe } from "../lib/safe";
@@ -82,9 +82,31 @@ export class Engine {
     const orderbook = this.orderbooks.find((o) => o.ticker() == market);
     const baseAsset = market.split("_")[0];
     const quoteAsset = market.split("_")[1];
-    if (!orderbook) {
-      throw new Error("No orderBook found for this ticker");
+
+    if (!orderbook || !baseAsset || !quoteAsset) {
+      throw new Error(
+        "Invalid market pair - orderbook or asset pair does not exist"
+      );
     }
+    this.checkAndLockFunds(
+      baseAsset,
+      quoteAsset,
+      side,
+      userId,
+      price,
+      quantity
+    );
+
+    const order: Order = {
+      price: Number(price),
+      quantity: Number(quantity),
+      side,
+      userId,
+      filled: 0,
+      orderId: crypto.randomUUID(),
+    };
+    const {fills,executedQty} = orderbook.addOrder(order);
+
   }
 
   // quoteAsset means that we're giving . Base asset what we're thinking of buying.
@@ -105,13 +127,70 @@ export class Engine {
     price: string,
     quantity: string
   ) {
+    // From user perspective . They buy the baseAsset thus requies the quoteAsset in their balance
+    const userBalance = this.getOrCreateUserBalance(
+      userId,
+      quoteAsset,
+      baseAsset
+    );
     if (side == "BUY") {
+      const requiredAmount = Number(price) * Number(quantity);
       if (
-        (this.balances.get(userId)?.[quoteAsset]?.available || 0) <
-        Number(quantity) * Number(price)
+        !userBalance[quoteAsset] ||
+        userBalance[quoteAsset].available < requiredAmount
       ) {
         throw new Error("Insufficient Funds.");
       }
+
+      userBalance[quoteAsset].available -= Number(quantity) * Number(price);
+      userBalance[quoteAsset].locked += Number(quantity) * Number(price);
+    } else {
+      // For SELL orders, lock the base asset being sold
+      const userBalance = this.getOrCreateUserBalance(
+        userId,
+        quoteAsset,
+        baseAsset
+      );
+      const requiredAmount = Number(quantity);
+      if (
+        !userBalance[baseAsset] ||
+        userBalance[baseAsset].available < requiredAmount
+      ) {
+        throw new Error("Insufficient base asset balance for this sell order");
+      }
+      userBalance[baseAsset].available -= Number(quantity);
+      userBalance[baseAsset].locked += Number(quantity);
+    }
+  }
+  private getOrCreateUserBalance(
+    userId: string,
+    quoteAsset: string,
+    baseAsset: string
+  ) {
+    if (!this.balances.has(userId)) {
+      this.balances.set(userId, {});
+    }
+
+    const userBalance = this.balances.get(userId)!;
+
+    if (!userBalance[quoteAsset]) {
+      userBalance[quoteAsset] = { available: 0, locked: 0 };
+    }
+
+    if (!userBalance[baseAsset]) {
+      userBalance[baseAsset] = { available: 0, locked: 0 };
+    }
+
+    return userBalance;
+  }
+  private updateBalance(userId:string,baseAsset:string,quoteAsset:string,side:Side,fills:Fill[],executedQty:number){
+    const userBalance = this.getOrCreateUserBalance(userId,quoteAsset,baseAsset);
+    if(side=="BUY"){
+        fills.forEach(fill=>{
+            
+        })
+    }else{
+
     }
   }
 }
