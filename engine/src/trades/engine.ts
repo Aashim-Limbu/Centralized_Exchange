@@ -1,5 +1,5 @@
 import fs from "fs";
-import { OrderBook, type Order } from "./orderbook";
+import { OrderBook, type Order, type Side } from "./orderbook";
 import type { MessageFromApi } from "../types/fromApi";
 import { CREATE_ORDER } from "../types/toApi";
 import { safe } from "../lib/safe";
@@ -9,9 +9,9 @@ interface UserBalance {
   locked: number;
 }
 type Balance = Record<string, UserBalance>;
-interface ProcessProps{
-    message: MessageFromApi,
-    clientId: string  // a channel where the engine publish message to api.
+interface ProcessProps {
+  message: MessageFromApi;
+  clientId: string; // a channel where the engine publish message to api.
 }
 /**
 balances = {
@@ -32,7 +32,7 @@ interface Snapshot {
 export const BASE_CURRENCY = "USD";
 export class Engine {
   private orderbooks: OrderBook[] = [];
-  private balances: Map<string, UserBalance> = new Map();
+  private balances: Map<string, Balance> = new Map();
   constructor() {
     let snapshot = null;
     try {
@@ -71,12 +71,47 @@ export class Engine {
     };
     fs.writeFileSync("./snapshot.json", JSON.stringify(snapshot));
   }
-   process({message,clientId}:ProcessProps) {
-    switch (message.type){
-        case CREATE_ORDER:
-            safe(
-                
-            )
+  process({ message, clientId }: ProcessProps) {}
+  createOrder(
+    market: string,
+    price: string,
+    quantity: string,
+    side: Side,
+    userId: string
+  ) {
+    const orderbook = this.orderbooks.find((o) => o.ticker() == market);
+    const baseAsset = market.split("_")[0];
+    const quoteAsset = market.split("_")[1];
+    if (!orderbook) {
+      throw new Error("No orderBook found for this ticker");
+    }
+  }
+
+  // quoteAsset means that we're giving . Base asset what we're thinking of buying.
+  /**
+   *
+   * @param baseAsset "GRBL,ILI" is like a baseAsset.
+   * @param quoteAsset "NRS|USD" will be the quoteAsset.
+   * @param side "BUY|SELL" will be the side.
+   * @param userId User that place the order.
+   * @param price Price per unit.
+   * @param quantity How many units to trade.
+   */
+  checkAndLockFunds(
+    baseAsset: string,
+    quoteAsset: string,
+    side: Side,
+    userId: string,
+    price: string,
+    quantity: string
+  ) {
+    if (side == "BUY") {
+      if (
+        (this.balances.get(userId)?.[quoteAsset]?.available || 0) <
+        Number(quantity) * Number(price)
+      ) {
+        throw new Error("Insufficient Funds.");
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-type Side = "BUY" | "SELL";
+export type Side = "BUY" | "SELL";
 export interface Order {
   price: number;
   quantity: number;
