@@ -105,8 +105,8 @@ export class Engine {
       filled: 0,
       orderId: crypto.randomUUID(),
     };
-    const {fills,executedQty} = orderbook.addOrder(order);
-
+    const { fills, executedQty } = orderbook.addOrder(order);
+    this.updateBalance(userId,baseAsset,quoteAsset,side,fills,executedQty);
   }
 
   // quoteAsset means that we're giving . Base asset what we're thinking of buying.
@@ -142,15 +142,10 @@ export class Engine {
         throw new Error("Insufficient Funds.");
       }
 
-      userBalance[quoteAsset].available -= Number(quantity) * Number(price);
-      userBalance[quoteAsset].locked += Number(quantity) * Number(price);
+      userBalance[quoteAsset].available -= requiredAmount;
+      userBalance[quoteAsset].locked += requiredAmount;
     } else {
       // For SELL orders, lock the base asset being sold
-      const userBalance = this.getOrCreateUserBalance(
-        userId,
-        quoteAsset,
-        baseAsset
-      );
       const requiredAmount = Number(quantity);
       if (
         !userBalance[baseAsset] ||
@@ -158,8 +153,8 @@ export class Engine {
       ) {
         throw new Error("Insufficient base asset balance for this sell order");
       }
-      userBalance[baseAsset].available -= Number(quantity);
-      userBalance[baseAsset].locked += Number(quantity);
+      userBalance[baseAsset].available -= requiredAmount;
+      userBalance[baseAsset].locked += requiredAmount;
     }
   }
   private getOrCreateUserBalance(
@@ -183,14 +178,49 @@ export class Engine {
 
     return userBalance;
   }
-  private updateBalance(userId:string,baseAsset:string,quoteAsset:string,side:Side,fills:Fill[],executedQty:number){
-    const userBalance = this.getOrCreateUserBalance(userId,quoteAsset,baseAsset);
-    if(side=="BUY"){
-        fills.forEach(fill=>{
-            
-        })
-    }else{
-
+  /**
+   * @dev when updating the balances never touch the available balance directly. If it was a BUY order , the other user already subtracted from the available during the lock phase.
+   * @dev when there is SELL order, The user already subtracted from available lock phase.
+   */
+  private updateBalance(
+    userId: string,
+    baseAsset: string,
+    quoteAsset: string,
+    side: Side,
+    fills: Fill[],
+    executedQty: number
+  ) {
+    const userBalance = this.getOrCreateUserBalance(
+      userId,
+      quoteAsset,
+      baseAsset
+    );
+    if (side == "BUY") {
+      fills.forEach((fill) => {
+        const otherUserBalance = this.getOrCreateUserBalance(
+          fill.otherUserId,
+          quoteAsset,
+          baseAsset
+        );
+        const requiredAmount = fill.price * fill.qty;
+        otherUserBalance[quoteAsset]!.available += requiredAmount; //MM receives money
+        otherUserBalance[baseAsset]!.locked -= fill.qty; // Unlock the seller's baseAsset
+        userBalance[quoteAsset]!.locked -= requiredAmount; // Unlock buyer's quoteAsset
+        userBalance[baseAsset]!.available += fill.qty; //Buyer receives asset
+      });
+    } else {
+      fills.forEach((fill) => {
+        const otherBalance = this.getOrCreateUserBalance(
+          fill.otherUserId,
+          quoteAsset,
+          baseAsset
+        );
+        const requiredAmount = fill.price * fill.qty;
+        userBalance[baseAsset]!.locked -= fill.qty; // Unlock seller's asset.
+        userBalance[quoteAsset]!.available += requiredAmount; //Seller receives money.
+        otherBalance[quoteAsset]!.locked -= requiredAmount; // Unlock buyer's money.
+        otherBalance[baseAsset]!.available += fill.qty; // Buyer receives asset.
+      });
     }
   }
 }
