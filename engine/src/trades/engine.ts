@@ -71,7 +71,20 @@ export class Engine {
     };
     fs.writeFileSync("./snapshot.json", JSON.stringify(snapshot));
   }
-  process({ message, clientId }: ProcessProps) {}
+  process({ message, clientId }: ProcessProps) {
+    switch (message.type) {
+        case CREATE_ORDER:
+            try {
+                const data = this.createOrder(message.data.market,message.data.price,message.data.quantity,message.data.side,message.data.userId);
+            } catch (error) {
+
+            }
+            break;
+
+        default:
+            break;
+    }
+  }
   createOrder(
     market: string,
     price: string,
@@ -106,7 +119,17 @@ export class Engine {
       orderId: crypto.randomUUID(),
     };
     const { fills, executedQty } = orderbook.addOrder(order);
-    this.updateBalance(userId,baseAsset,quoteAsset,side,fills,executedQty);
+    this.updateBalance(
+      userId,
+      baseAsset,
+      quoteAsset,
+      side,
+      fills,
+      executedQty,
+      Number(price),
+      Number(quantity)
+    );
+    return {executedQty,fills,orderId: order.orderId}
   }
 
   // quoteAsset means that we're giving . Base asset what we're thinking of buying.
@@ -188,7 +211,9 @@ export class Engine {
     quoteAsset: string,
     side: Side,
     fills: Fill[],
-    executedQty: number
+    executedQty: number,
+    originalPrice: number,
+    originalQuantity: number
   ) {
     const userBalance = this.getOrCreateUserBalance(
       userId,
@@ -196,31 +221,43 @@ export class Engine {
       baseAsset
     );
     if (side == "BUY") {
+      let totalSpent = 0;
       fills.forEach((fill) => {
         const otherUserBalance = this.getOrCreateUserBalance(
           fill.otherUserId,
           quoteAsset,
           baseAsset
         );
-        const requiredAmount = fill.price * fill.qty;
-        otherUserBalance[quoteAsset]!.available += requiredAmount; //MM receives money
-        otherUserBalance[baseAsset]!.locked -= fill.qty; // Unlock the seller's baseAsset
-        userBalance[quoteAsset]!.locked -= requiredAmount; // Unlock buyer's quoteAsset
+        const filledAmount = fill.price * fill.qty;
+        totalSpent += filledAmount;
+        otherUserBalance[quoteAsset]!.available += filledAmount; //MM receives money
+        otherUserBalance[baseAsset]!.locked -= fill.qty; // Unlock the seller's baseAsset [nullify the locked asset of the MM]
         userBalance[baseAsset]!.available += fill.qty; //Buyer receives asset
       });
+      // Unlock at the buyers best price and returns the remaining.
+      const totalLocked = Number(originalPrice) * Number(originalQuantity);
+      userBalance[quoteAsset]!.locked -= totalLocked;
+      const refundAmount = totalLocked - totalSpent;
+      userBalance[quoteAsset]!.available += refundAmount;
     } else {
+      let totalRecieved = 0;
       fills.forEach((fill) => {
         const otherBalance = this.getOrCreateUserBalance(
           fill.otherUserId,
           quoteAsset,
           baseAsset
         );
-        const requiredAmount = fill.price * fill.qty;
-        userBalance[baseAsset]!.locked -= fill.qty; // Unlock seller's asset.
-        userBalance[quoteAsset]!.available += requiredAmount; //Seller receives money.
-        otherBalance[quoteAsset]!.locked -= requiredAmount; // Unlock buyer's money.
+        const fillAmount = fill.price * fill.qty;
+        totalRecieved += fillAmount;
+        userBalance[quoteAsset]!.available += fillAmount; //Seller receives money.
+        otherBalance[quoteAsset]!.locked -= fillAmount; // Unlock buyer's money.
         otherBalance[baseAsset]!.available += fill.qty; // Buyer receives asset.
       });
+      userBalance[baseAsset]!.locked -= executedQty; // Unlock seller's asset.
+      const unfilledQty = Number(originalQuantity) - executedQty;
+      if (unfilledQty > 0) {
+        userBalance[baseAsset]!.available += unfilledQty;
+      }
     }
   }
 }
