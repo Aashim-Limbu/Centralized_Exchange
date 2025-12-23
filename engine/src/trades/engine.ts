@@ -2,7 +2,7 @@ import fs from "fs";
 import { OrderBook, type Fill, type Order, type Side } from "./orderbook";
 import type { MessageFromApi } from "../types/fromApi";
 import { CREATE_ORDER } from "../types/toApi";
-import { safe } from "../lib/safe";
+import { RedisManager } from "../RedisManager";
 
 interface UserBalance {
   available: number;
@@ -73,16 +73,39 @@ export class Engine {
   }
   process({ message, clientId }: ProcessProps) {
     switch (message.type) {
-        case CREATE_ORDER:
-            try {
-                const data = this.createOrder(message.data.market,message.data.price,message.data.quantity,message.data.side,message.data.userId);
-            } catch (error) {
+      case CREATE_ORDER:
+        try {
+          const data = this.createOrder(
+            message.data.market,
+            message.data.price,
+            message.data.quantity,
+            message.data.side,
+            message.data.userId
+          );
+          // publishing the message to the api [the subscriber]
+          RedisManager.getInstance().pushMessageToApi(clientId, {
+            type: "ORDER_PLACED",
+            payload: {
+              orderId: data.orderId,
+              executedQty: data.executedQty,
+              fills: data.fills,
+            },
+          });
+        } catch (error) {
+          console.error(`Error`, error);
+          RedisManager.getInstance().pushMessageToApi(clientId, {
+            type: "ORDER_CANCELLED",
+            payload: {
+              orderId: "",
+              executedQty: 0,
+              remainingQty: 0,
+            },
+          });
+        }
+        break;
 
-            }
-            break;
-
-        default:
-            break;
+      default:
+        break;
     }
   }
   createOrder(
@@ -129,7 +152,7 @@ export class Engine {
       Number(price),
       Number(quantity)
     );
-    return {executedQty,fills,orderId: order.orderId}
+    return { executedQty, fills, orderId: order.orderId };
   }
 
   // quoteAsset means that we're giving . Base asset what we're thinking of buying.

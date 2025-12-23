@@ -1,5 +1,7 @@
 // import { Order } from "../trade/Orderbook";
 
+import type { Fill } from "../trades/orderbook";
+
 export const CREATE_ORDER = "CREATE_ORDER";
 export const CANCEL_ORDER = "CANCEL_ORDER";
 export const ON_RAMP = "ON_RAMP";
@@ -19,11 +21,7 @@ export type MessageToApi =
       payload: {
         orderId: string;
         executedQty: number;
-        fills: {
-          price: string;
-          qty: number;
-          tradeId: number;
-        }[];
+        fills: Fill[];
       };
     }
   | {
@@ -36,5 +34,5 @@ export type MessageToApi =
     }
   | {
       type: "OPEN_ORDERS";
-    //   payload: Order[];
+      //   payload: Order[];
     };
