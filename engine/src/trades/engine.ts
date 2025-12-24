@@ -1,6 +1,6 @@
 import fs from "fs";
 import { OrderBook, type Fill, type Order, type Side } from "./orderbook";
-import type { MessageFromApi } from "../types/fromApi";
+import { CANCEL_ORDER, type MessageFromApi } from "../types/fromApi";
 import { CREATE_ORDER } from "../types/toApi";
 import { RedisManager } from "../RedisManager";
 
@@ -103,7 +103,25 @@ export class Engine {
           });
         }
         break;
-
+      case CANCEL_ORDER:
+        try {
+          const orderId = message.data.orderId;
+          const cancelMarket = message.data.market;
+          const cancelOrderBook = this.orderbooks.find(
+            (o) => o.ticker() === cancelMarket
+          );
+          const quoteAsset = cancelMarket.split("-")[1];
+          if(!cancelOrderBook){
+            throw new Error("No orderbook found");
+          }
+          const order = cancelOrderBook.asks.find(o=>o.orderId === orderId) || cancelOrderBook.bids.find(o=>o.orderId===orderId);
+          if(!order){
+            console.log("No order Found.")
+            throw new Error("No order found.")
+            
+          }
+        } catch (error) {}
+        break;
       default:
         break;
     }
