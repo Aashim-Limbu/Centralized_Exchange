@@ -58,11 +58,12 @@ export class OrderBook {
   }
   cancelBid(order: Order) {
     const index = this.bids.findIndex((x) => x.orderId === order.orderId);
-    if (index !== -1) {
-      const price = this.bids[index]?.price;
-      this.bids.splice(index, 1);
-      return price;
+    if (index === -1) {
+      throw new Error(`No bid found for this id: ${order.orderId} `);
     }
+    const price = this.bids[index]!.price;
+    this.bids.splice(index, 1);
+    return price;
   }
   cancelAsk(order: Order) {
     const index = this.asks.findIndex((o) => o.orderId === order.orderId);

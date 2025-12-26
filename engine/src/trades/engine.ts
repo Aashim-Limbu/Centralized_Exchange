@@ -3,6 +3,7 @@ import { OrderBook, type Fill, type Order, type Side } from "./orderbook";
 import { CANCEL_ORDER, type MessageFromApi } from "../types/fromApi";
 import { CREATE_ORDER } from "../types/toApi";
 import { RedisManager } from "../RedisManager";
+import { availableMemory } from "process";
 
 interface UserBalance {
   available: number;
@@ -105,22 +106,52 @@ export class Engine {
         break;
       case CANCEL_ORDER:
         try {
-          const orderId = message.data.orderId;
-          const cancelMarket = message.data.market;
-          const cancelOrderBook = this.orderbooks.find(
-            (o) => o.ticker() === cancelMarket
+          const { market: marketToCancel, orderId } = message.data;
+          const orderBook = this.orderbooks.find(
+            (o) => o.ticker() === marketToCancel
           );
-          const quoteAsset = cancelMarket.split("-")[1];
-          if(!cancelOrderBook){
+          if (!orderBook) {
             throw new Error("No orderbook found");
           }
-          const order = cancelOrderBook.asks.find(o=>o.orderId === orderId) || cancelOrderBook.bids.find(o=>o.orderId===orderId);
-          if(!order){
-            console.log("No order Found.")
-            throw new Error("No order found.")
-            
+          const baseAsset = marketToCancel.split("-")[0]!;
+          const quoteAsset = marketToCancel.split("-")[1]!;
+          const userOrder =
+            orderBook.asks.find((o) => o.orderId === orderId) ||
+            orderBook.bids.find((o) => o.orderId === orderId);
+          if (!userOrder) {
+            throw new Error(`No order found with id: ${orderId}`);
           }
-        } catch (error) {}
+          if (userOrder.side === "BUY") {
+            // release the quote asset from locked.
+            const price = orderBook.cancelBid(userOrder);
+            const leftQuantity =
+              (userOrder.quantity - userOrder.filled) * price;
+            const user = userOrder.userId;
+            const balance = this.balances.get(user)![quoteAsset];
+            balance!.available += leftQuantity;
+            balance!.locked -= leftQuantity;
+          } else {
+            // release the base asset from locked.
+            const price = orderBook.cancelAsk(userOrder);
+            const leftQuantity = userOrder.quantity - userOrder.filled;
+            const userBalance = this.balances.get(userOrder.userId)![
+              baseAsset
+            ]!;
+            userBalance.available += leftQuantity;
+            userBalance.locked -= leftQuantity;
+          }
+          RedisManager.getInstance().pushMessageToApi(clientId, {
+            type: "ORDER_CANCELLED",
+            payload: {
+              orderId,
+              executedQty: 0,
+              remainingQty: 0,
+            },
+          });
+        } catch (error) {
+          console.log("===Error while canceling the order===");
+          console.error(error);
+        }
         break;
       default:
         break;
