@@ -54,4 +54,5 @@ export type MessageFromApi =
   | CreateOrder
   | CancelOrder
   | GetDepth
+  | OnRamp
   | GetOpenOrders;

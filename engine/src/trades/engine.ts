@@ -1,7 +1,7 @@
 import fs from "fs";
 import { OrderBook, type Fill, type Order, type Side } from "./orderbook";
-import { CANCEL_ORDER, type MessageFromApi } from "../types/fromApi";
-import { CREATE_ORDER } from "../types/toApi";
+import { CANCEL_ORDER, ON_RAMP, type MessageFromApi } from "../types/fromApi";
+import { CREATE_ORDER, GET_DEPTH } from "../types/toApi";
 import { RedisManager } from "../RedisManager";
 import { availableMemory } from "process";
 
@@ -17,12 +17,12 @@ interface ProcessProps {
 /**
 balances = {
     "1": {
-        NRS:  { available: 10000000, locked: 0 },
-        GBRL: { available: 10000000, locked: 0 }
+        HRL:  { available: 100, locked: 0 },
+        USD: { available: 10000000, locked: 0 }
     },
     "2": {
-        NRS:  { available: 10000000, locked: 0 },
-        HRL: { available: 10000000, locked: 0 }
+        GRBL:  { available: 200, locked: 0 },
+        USD: { available: 10000000, locked: 0 }
     }
 }
 */
@@ -121,36 +121,63 @@ export class Engine {
           if (!userOrder) {
             throw new Error(`No order found with id: ${orderId}`);
           }
+          const userBalance = this.getOrCreateUserBalance(
+            userOrder.userId,
+            quoteAsset,
+            baseAsset
+          );
+          const unfilledQty = userOrder.quantity - userOrder.filled;
           if (userOrder.side === "BUY") {
-            // release the quote asset from locked.
-            const price = orderBook.cancelBid(userOrder);
-            const leftQuantity =
-              (userOrder.quantity - userOrder.filled) * price;
-            const user = userOrder.userId;
-            const balance = this.balances.get(user)![quoteAsset];
-            balance!.available += leftQuantity;
-            balance!.locked -= leftQuantity;
+            // release the quote asset from locked (using original locked price).
+            orderBook.cancelBid(userOrder);
+            const lockedAmount = unfilledQty * userOrder.price;
+            userBalance[quoteAsset]!.available += lockedAmount;
+            userBalance[quoteAsset]!.locked -= lockedAmount;
           } else {
             // release the base asset from locked.
-            const price = orderBook.cancelAsk(userOrder);
-            const leftQuantity = userOrder.quantity - userOrder.filled;
-            const userBalance = this.balances.get(userOrder.userId)![
-              baseAsset
-            ]!;
-            userBalance.available += leftQuantity;
-            userBalance.locked -= leftQuantity;
+            orderBook.cancelAsk(userOrder);
+            userBalance[baseAsset]!.available += unfilledQty;
+            userBalance[baseAsset]!.locked -= unfilledQty;
           }
           RedisManager.getInstance().pushMessageToApi(clientId, {
             type: "ORDER_CANCELLED",
             payload: {
               orderId,
-              executedQty: 0,
-              remainingQty: 0,
+              executedQty: userOrder.filled,
+              remainingQty: unfilledQty,
             },
           });
         } catch (error) {
           console.log("===Error while canceling the order===");
           console.error(error);
+          RedisManager.getInstance().pushMessageToApi(clientId, {
+            type: "ORDER_CANCELLED",
+            payload: {
+              orderId: "",
+              executedQty: 0,
+              remainingQty: 0,
+            },
+          });
+        }
+        break;
+      case ON_RAMP:
+        const { amount, userId } = message.data;
+        this.onRamp(userId, Number(amount));
+        break;
+      case GET_DEPTH:
+        // query user's active order
+        try {
+            const {market} = message.data;
+            const orderBook = this.orderbooks.find(o=>o.ticker() === market);
+            if(!orderBook){
+                throw new Error("No orderBook found");
+            }
+            // RedisManager.getInstance().pushMessageToApi(clientId,{
+            //     type:"DEPTH",
+            //     payload: orderBook
+            // })
+        } catch (error) {
+
         }
         break;
       default:
@@ -330,6 +357,19 @@ export class Engine {
       if (unfilledQty > 0) {
         userBalance[baseAsset]!.available += unfilledQty;
       }
+    }
+  }
+  private onRamp(userId: string, amount: number) {
+    const userBalance = this.balances.get(userId);
+    if (!userBalance) {
+      this.balances.set(userId, {
+        [BASE_CURRENCY]: {
+          available: amount,
+          locked: 0,
+        },
+      });
+    } else {
+      userBalance[BASE_CURRENCY]!.available += amount;
     }
   }
 }

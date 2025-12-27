@@ -23,6 +23,10 @@ export class OrderBook {
   quoteAsset: string = "USD";
   lastTradeId: number;
   currentPrice: number;
+  private depthCache: {
+    bids: Map<number, number>;
+    asks: Map<number, number>;
+  };
   constructor(
     baseAsset: string,
     bids: Order[],
@@ -35,6 +39,11 @@ export class OrderBook {
     this.baseAsset = baseAsset;
     this.lastTradeId = lastTradeId || 0;
     this.currentPrice = currentPrice || 0;
+    this.depthCache = {
+      bids: new Map(),
+      asks: new Map(),
+    };
+    this.rebuildDepthCache();
   }
   ticker() {
     return `${this.baseAsset}-${this.quoteAsset}`;
@@ -159,5 +168,21 @@ export class OrderBook {
       this.asks.sort((a, b) => a.price - b.price);
     }
     return { executedQty, fills };
+  }
+  private rebuildDepthCache() {
+    this.depthCache.asks.clear();
+    this.depthCache.bids.clear();
+    for (const bid of this.bids) {
+      const remaining = bid.quantity - bid.filled;
+      const cacheBids = this.depthCache.bids;
+      const current = cacheBids.get(bid.price) || 0;
+      cacheBids.set(bid.price, current + remaining);
+    }
+    for (const ask of this.asks) {
+      const remaining = ask.quantity - ask.filled;
+      const cacheAsks = this.depthCache.asks;
+      const current = cacheAsks.get(ask.price) || 0;
+      cacheAsks.set(ask.price, current + remaining);
+    }
   }
 }
