@@ -185,4 +185,43 @@ export class OrderBook {
       cacheAsks.set(ask.price, current + remaining);
     }
   }
+  private updateDepthOnAdd(price: number, quantity: number, side: Side) {
+    const map = side === "BUY" ? this.depthCache.bids : this.depthCache.asks;
+    const current = map.get(price) || 0;
+    map.set(price, current + quantity);
+  }
+  private updateDepthOnRemove(
+    price: number,
+    quantity: number,
+    side: "buy" | "sell"
+  ) {
+    const map = side === "buy" ? this.depthCache.bids : this.depthCache.asks;
+    const current = map.get(price) || 0;
+    const newQty = current - quantity;
+
+    if (newQty <= 0) {
+      map.delete(price);
+    } else {
+      map.set(price, newQty);
+    }
+  }
+  getDepth() {
+    const bids: [string, string][] = [];
+    const asks: [string, string][] = [];
+
+    // Convert Map to array format
+    for (const [price, qty] of this.depthCache.bids.entries()) {
+      bids.push([price.toString(), qty.toString()]);
+    }
+
+    for (const [price, qty] of this.depthCache.asks.entries()) {
+      asks.push([price.toString(), qty.toString()]);
+    }
+
+    // Sort for display (optional but nice)
+    bids.sort((a, b) => Number(b[0]) - Number(a[0])); // Descending
+    asks.sort((a, b) => Number(a[0]) - Number(b[0])); // Ascending
+
+    return { bids, asks };
+  }
 }
