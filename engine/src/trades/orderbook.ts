@@ -193,9 +193,9 @@ export class OrderBook {
   private updateDepthOnRemove(
     price: number,
     quantity: number,
-    side: "buy" | "sell"
+    side: Side
   ) {
-    const map = side === "buy" ? this.depthCache.bids : this.depthCache.asks;
+    const map = side === "BUY" ? this.depthCache.bids : this.depthCache.asks;
     const current = map.get(price) || 0;
     const newQty = current - quantity;
 
