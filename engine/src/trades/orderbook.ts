@@ -60,25 +60,9 @@ export class OrderBook {
   }
   addOrder(order: Order) {
     if (order.side === "BUY") {
-      const { executedQty, fills } = this.matchBuyOrderOptimized(order);
-      order.filled = executedQty;
-      if (executedQty < order.quantity) {
-        this.bids.push(order);
-        this.updateDepthOnAdd(order.price, order.quantity - executedQty, "BUY");
-      }
-      return { executedQty, fills };
+      return this.matchBuyOrderOptimized(order);
     } else {
-      const { executedQty, fills } = this.matchSellOrderOptimized(order);
-      order.filled = executedQty;
-      if (executedQty < order.quantity) {
-        this.asks.push(order);
-        this.updateDepthOnAdd(
-          order.price,
-          order.quantity - executedQty,
-          "SELL"
-        );
-      }
-      return { executedQty, fills };
+      return this.matchSellOrderOptimized(order);
     }
   }
   cancelBid(order: Order) {
@@ -139,6 +123,7 @@ export class OrderBook {
     if (executedQty < order.quantity) {
       this.bids.push({ ...order, filled: executedQty });
       this.bids.sort((a, b) => b.price - a.price);
+      this.updateDepthOnAdd(order.price, order.quantity - executedQty, "BUY");
     }
     return { fills, executedQty };
   }
@@ -182,6 +167,7 @@ export class OrderBook {
     if (executedQty < order.quantity) {
       this.asks.push({ ...order, filled: executedQty });
       this.asks.sort((a, b) => a.price - b.price);
+      this.updateDepthOnAdd(order.price, order.quantity - executedQty, "SELL");
     }
     return { executedQty, fills };
   }
