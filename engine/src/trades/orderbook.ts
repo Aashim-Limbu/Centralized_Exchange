@@ -60,9 +60,25 @@ export class OrderBook {
   }
   addOrder(order: Order) {
     if (order.side === "BUY") {
-      return this.matchBuyOrderOptimized(order);
+      const { executedQty, fills } = this.matchBuyOrderOptimized(order);
+      order.filled = executedQty;
+      if (executedQty < order.quantity) {
+        this.bids.push(order);
+        this.updateDepthOnAdd(order.price, order.quantity - executedQty, "BUY");
+      }
+      return { executedQty, fills };
     } else {
-      return this.matchSellOrderOptimized(order);
+      const { executedQty, fills } = this.matchSellOrderOptimized(order);
+      order.filled = executedQty;
+      if (executedQty < order.quantity) {
+        this.asks.push(order);
+        this.updateDepthOnAdd(
+          order.price,
+          order.quantity - executedQty,
+          "SELL"
+        );
+      }
+      return { executedQty, fills };
     }
   }
   cancelBid(order: Order) {
@@ -190,11 +206,7 @@ export class OrderBook {
     const current = map.get(price) || 0;
     map.set(price, current + quantity);
   }
-  private updateDepthOnRemove(
-    price: number,
-    quantity: number,
-    side: Side
-  ) {
+  private updateDepthOnRemove(price: number, quantity: number, side: Side) {
     const map = side === "BUY" ? this.depthCache.bids : this.depthCache.asks;
     const current = map.get(price) || 0;
     const newQty = current - quantity;
