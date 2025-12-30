@@ -150,7 +150,7 @@ export class OrderBook {
       let available_quantity = bid.quantity - bid.filled;
       let fillable_quantity = Math.min(remaining_quantity, available_quantity);
       fills.push({
-        price: order.price,
+        price: bid.price,
         qty: fillable_quantity,
         tradeId: ++this.lastTradeId,
         otherUserId: order.userId,
@@ -158,8 +158,9 @@ export class OrderBook {
       });
       bid.filled += fillable_quantity;
       executedQty += fillable_quantity;
-      this.currentPrice = order.price;
+      this.currentPrice = bid.price;
       if (bid.quantity === bid.filled) {
+        this.updateDepthOnRemove(order.price,order.quantity,"BUY")
         this.bids.splice(i, 1);
         i--;
       }

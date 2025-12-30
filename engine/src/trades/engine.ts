@@ -167,18 +167,16 @@ export class Engine {
       case GET_DEPTH:
         // query user's active order
         try {
-            const {market} = message.data;
-            const orderBook = this.orderbooks.find(o=>o.ticker() === market);
-            if(!orderBook){
-                throw new Error("No orderBook found");
-            }
-            // RedisManager.getInstance().pushMessageToApi(clientId,{
-            //     type:"DEPTH",
-            //     payload: orderBook
-            // })
-        } catch (error) {
-
-        }
+          const { market } = message.data;
+          const orderBook = this.orderbooks.find((o) => o.ticker() === market);
+          if (!orderBook) {
+            throw new Error("No orderBook found");
+          }
+          // RedisManager.getInstance().pushMessageToApi(clientId,{
+          //     type:"DEPTH",
+          //     payload: orderBook
+          // })
+        } catch (error) {}
         break;
       default:
         break;
@@ -352,11 +350,11 @@ export class Engine {
         otherBalance[quoteAsset]!.locked -= fillAmount; // Unlock buyer's money.
         otherBalance[baseAsset]!.available += fill.qty; // Buyer receives asset.
       });
-      userBalance[baseAsset]!.locked -= executedQty; // Unlock seller's asset.
+      // Unlock all originally locked quantity
+      userBalance[baseAsset]!.locked -= originalQuantity;
       const unfilledQty = Number(originalQuantity) - executedQty;
-      if (unfilledQty > 0) {
-        userBalance[baseAsset]!.available += unfilledQty;
-      }
+      // Return unfilled quantity to available
+      userBalance[baseAsset]!.available += unfilledQty;
     }
   }
   private onRamp(userId: string, amount: number) {
